@@ -1,0 +1,329 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>
+	Main
+</title>
+<link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+<link rel="stylesheet" href="/resources/demos/style.css">
+<script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+<script>
+$( function() {
+	$( "#datepicker1" ).datepicker();
+} );
+$( function() {
+	$( "#datepicker2" ).datepicker();
+} );
+</script>
+	
+<script>
+
+window.onload = function () {
+
+var dataPoints = [];
+
+var chart = new CanvasJS.Chart("chartContainer", {
+	animationEnabled: true,
+	theme: "dark1", // "light1", "light2", "dark1", "dark2"
+	exportEnabled: true,
+	zoomEnabled: true,
+	title: {
+		text: "{{currencyname}}" 
+	},
+	subtitles: [{
+		text: "( {% with currencyData|last as last %}{{ last.Date }}{% endwith %} to {{currencyData.0.Date}} )"
+	}],
+	axisX: {
+		interval: 1,
+		valueFormatString: "DD-MMM Y"
+	},
+	axisY: {
+		includeZero: false,
+		prefix: "$",
+		title: "Price"
+	},
+	toolTip: {
+		content: "Date: {x}<br /><strong>Price:</strong><br />Open: {y[0]}, Close: {y[3]}<br />High: {y[1]}, Low: {y[2]}<br />Volume: {m[0]}<br />Market Capital: {m[1]}"
+	},
+	data: [{
+		click: function(e){
+			
+			var value = e.dataPoint.x
+			url = "{% url 'visual:index' %}"+"{{currencyname}}_"+value;
+			window.open(url,"_self")
+   		},
+		type: "candlestick",
+		yValueFormatString: "$##0.00",
+        risingColor: "red",
+        color: "black",
+		dataPoints: dataPoints
+	}]
+});
+
+(function getDataPoints() {
+	var csvLines = points = [];
+    var i=0;
+	{% for data in currencyData %}
+        csvLines[i] = "{{data.Date}},{{data.Open}},{{data.High}},{{data.Low}},{{data.Close}},{{data.Volume}},{{data.Market_Cap}}"
+        i++;
+    {% endfor %}
+	for (var i = 0; i < csvLines.length; i++) {
+		if (csvLines[i].length > 0) {
+			points = csvLines[i].split(",");
+            console.log(points)
+            if(parseInt(points[0].split("-")[1]) == 1){
+                var month = 0
+            }
+            else{
+
+                var month = parseInt(points[0].split("-")[1]) - 1
+            }
+			dataPoints.push({
+				x: new Date(
+					parseInt(points[0].split("-")[0]),
+                    month
+					,
+					parseInt(points[0].split("-")[2])
+				),
+				y: [
+					parseFloat(points[1]),
+					parseFloat(points[2]),
+					parseFloat(points[3]),
+					parseFloat(points[4])
+				],
+				m: [
+					parseFloat(points[5]),
+					parseFloat(points[6])
+				]
+			});
+		}
+	}
+	chart.render();
+})();
+
+var positive = parseInt({{sentiment.0|length}})
+var neutral = parseInt({{sentiment.1|length}})
+var negative = parseInt({{sentiment.2|length}})
+var positivedata = {};
+var neutraldata = {};
+var negativedata = {};
+{% for sen in sentiment.0 %}
+	if(positivedata['{{sen.0}}']>=0){
+
+		positivedata['{{sen.0}}'] = positivedata['{{sen.0}}'] + 1;
+	}
+	else{
+
+		positivedata['{{sen.0}}'] = 1;
+	}
+{% endfor %}
+{% for sen in sentiment.1 %}
+	if(neutraldata['{{sen.0}}']>=0){
+
+		neutraldata['{{sen.0}}'] = neutraldata['{{sen.0}}'] + 1;
+	}
+	else{
+
+		neutraldata['{{sen.0}}'] = 1;
+	}
+{% endfor %}
+{% for sen in sentiment.2 %}
+	if(negativedata['{{sen.0}}']>=0){
+
+		negativedata['{{sen.0}}'] = negativedata['{{sen.0}}'] + 1;
+	}
+	else{
+
+		negativedata['{{sen.0}}'] = 1;
+	}
+{% endfor %}
+
+var posdatapoint = [];
+for (var key in positivedata){
+
+	posdatapoint.push({x: new Date(key), y: positivedata[key]});
+}
+var neudatapoint = [];
+for (var key in neutraldata){
+
+	neudatapoint.push({x: new Date(key), y: neutraldata[key]});
+}
+var negdatapoint = [];
+for (var key in negativedata){
+
+	negdatapoint.push({x: new Date(key), y: negativedata[key]});
+}
+var totaltweets = positive+neutral+negative;
+var visitorsData = {
+	"SentimentAnalysis": [{
+		click: visitorsChartDrilldownHandler,
+		cursor: "pointer",
+		explodeOnClick: false,
+		innerRadius: "65%",
+		legendMarkerType: "square",
+		name: "New vs Returning Visitors",
+		radius: "100%",
+		showInLegend: true,
+		startAngle: 90,
+		type: "doughnut",
+		dataPoints: [
+			{ y: positive, name: "Positive", color: "#0ba5e8" },
+			{ y: neutral, name: "Neutral", color: "#efd110" },
+			{ y: negative, name: "Negative", color: "#c41919" }
+		]
+	}],
+	"Positive": [{
+		color: "#0ba5e8",
+		name: "Positive",
+		type: "column",
+		dataPoints: posdatapoint
+	}],
+	"Neutral": [{
+		color: "#efd110",
+		name: "Neutral",
+		type: "column",
+		dataPoints: neudatapoint
+	}],
+	"Negative": [{
+		color: "#c41919",
+		name: "Negative",
+		type: "column",
+		dataPoints: negdatapoint
+	}]
+};
+
+var newVSReturningVisitorsOptions = {
+	animationEnabled: true,
+	theme: "light2",
+	title: {
+		text: "Sentiment Analysis"
+	},
+	subtitles: [{
+		text: "Click any segment for Statistics",
+		backgroundColor: "#2eacd1",
+		fontSize: 16,
+		fontColor: "white",
+		padding: 5
+	}],
+	legend: {
+		fontFamily: "calibri",
+		fontSize: 14,
+		itemTextFormatter: function (e) {
+			return e.dataPoint.name + ": " + Math.round(e.dataPoint.y / totaltweets * 100) + "%";  
+		}
+	},
+	data: []
+};
+
+var visitorsDrilldownedChartOptions = {
+	animationEnabled: true,
+	theme: "light2",
+	axisX: {
+		labelFontColor: "#717171",
+		lineColor: "#a2a2a2",
+		tickColor: "#a2a2a2"
+	},
+	axisY: {
+		gridThickness: 0,
+		includeZero: false,
+		labelFontColor: "#717171",
+		lineColor: "#a2a2a2",
+		tickColor: "#a2a2a2",
+		lineThickness: 1
+	},
+	data: []
+};
+
+var chart1 = new CanvasJS.Chart("Sentiment", newVSReturningVisitorsOptions);
+chart1.options.data = visitorsData["SentimentAnalysis"];
+chart1.render();
+
+function visitorsChartDrilldownHandler(e) {
+	chart1 = new CanvasJS.Chart("Sentiment", visitorsDrilldownedChartOptions);
+	chart1.options.data = visitorsData[e.dataPoint.name];
+	chart1.options.title = { text: e.dataPoint.name }
+	chart1.render();
+	$("#backButton").toggleClass("invisible");
+}
+
+$("#backButton").click(function() { 
+	$(this).toggleClass("invisible");
+	chart1 = new CanvasJS.Chart("Sentiment", newVSReturningVisitorsOptions);
+	chart1.options.data = visitorsData["SentimentAnalysis"];
+	chart1.render();
+});
+
+
+}
+</script>
+
+<style>
+		#backButton {
+		  border-radius: 4px;
+		  padding: 8px;
+		  border: none;
+		  font-size: 16px;
+		  background-color: #2eacd1;
+		  color: white;
+		  position: absolute;
+		  right: 10px;
+		  cursor: pointer;
+		}
+		.invisible {
+		  display: none;
+		}
+</style>
+</head>
+<body>
+
+<form action="{% url 'visual:index' %}" method="POST">
+	From: <input type="text" name="start" id="datepicker1" required>
+	&nbsp;&nbsp;
+	To: <input type="text" name="end" id="datepicker2" required>
+	&nbsp;&nbsp;
+	<select name="currency">
+		{% for curr in currencies %}
+		<option value="{{curr}}">{{curr}}</option>
+		{% endfor %}
+	</select>
+	&nbsp;&nbsp;
+	<button type="submit">Submit</button>
+</form><br><br><br>
+{% if currencyData %}
+	<div id="chartContainer" style="height: 300px; width: 100%;"></div><br><br>
+	<div id="Sentiment" style="height: 300px; width: 100%;"></div>
+	<button class="btn invisible" id="backButton">< Back</button>
+	<script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
+	<script src="https://canvasjs.com/assets/script/jquery-1.11.1.min.js"></script>
+	<script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+	<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+{% endif %}
+<br><br><br>
+{% if wordCloud %}
+<h2>Word Cloud</h2>
+{% for dates,values in wordCloud.items %}
+	<p>
+		<b>Date: </b>{{dates}}&nbsp;<br>
+		{% for word,value in values.items %}
+			<b>{{word}}: </b>{{value}}&nbsp;
+		{% endfor %}
+	</p>
+{% endfor %}
+{% endif %}
+
+<br><br><br>
+{% if currencyTweets %}
+<h2>Tweets</h2>
+{% for tweet in currencyTweets %}
+	<p>
+		{{tweet.0.tweetText}}&nbsp;<b>Date: </b>{{tweet.0.created}}&nbsp;<b>Retweeted Count: </b>{{tweet.0.retweeted_count}}&nbsp;<b>Favourite Count: </b>{{tweet.0.favourite_count}}&nbsp;<b>Sentiment: </b>{{tweet.1}}
+	</p>
+{% endfor %}
+{% endif %}
+</body>
+</html>
